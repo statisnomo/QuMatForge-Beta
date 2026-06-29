@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"./venv/Scripts/python.exe\" predict_json.py \"Si\")",
+      "Bash(python *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(timeout 5 tail *)",
+      "Bash(timeout 10 npm run dev)",
+      "Bash(curl *)",
+      "Bash(findstr :24678)",
+      "Bash(npm install *)",
+      "Bash(cd /d Fifa)",
+      "Bash(npm run *)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(npx tsx *)"
+    ]
+  }
+}

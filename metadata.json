@@ -1,0 +1,6 @@
+{
+  "name": "QuMatForge",
+  "description": "Materials Discovery App that uses machine learning and AI to predict and analyze stable compounds for quantum computing, including qubits, qubit hosts, and topological quantum materials.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
