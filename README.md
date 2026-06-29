@@ -9,7 +9,6 @@ The application leverages a modern React/Vite frontend and an Express/Node.js ba
 ---
 
 ## Prerequisites
-
 Before you begin, ensure you have the following installed:
 - **Node.js** (v18 or higher recommended)
 - **npm** (comes with Node.js)
