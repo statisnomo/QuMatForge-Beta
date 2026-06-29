@@ -5,10 +5,10 @@ QuMatForge is a Dual-Mode Quantum Materials Discovery Engine. It allows users to
 2. **Photonic & Continuous-Variable (CV) Quantum Systems**
 
 The application leverages a modern React/Vite frontend and an Express/Node.js backend, powered by the **Groq LLM API (Llama 3.3 70B)** for rapid material property inference and design suggestions.
-kkkkkkkkkkkkkkkkkkkk
+
 ---
 
---- meeeeeee
+
 
 ## Prerequisites
 
