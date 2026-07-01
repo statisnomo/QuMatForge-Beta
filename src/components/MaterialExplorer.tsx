@@ -25,9 +25,9 @@ export default function MaterialExplorer({ materials, selectedMaterial, onSelect
   // Filter materials based on search & category
   const filteredMaterials = materials.filter((m) => {
     const matchesSearch =
-      m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.formula.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.crystalSystem.toLowerCase().includes(searchTerm.toLowerCase());
+      (m.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.formula || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.crystalSystem || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === "All" || m.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });

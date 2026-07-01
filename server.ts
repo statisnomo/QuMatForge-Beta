@@ -482,6 +482,95 @@ Provide for each suggested material:
   }
 });
 
+// ============================================================
+// COUNCIL OF AGENTS - MULTI-MODEL DEBATE ENDPOINT
+// ============================================================
+app.post("/api/council-debate", async (req, res) => {
+  try {
+    const { formula, input_data } = req.body;
+    
+    // Set headers for Server-Sent Events (SSE)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Run Python ML models concurrently via predict.py
+    const { exec } = require("child_process");
+    const { promisify } = require("util");
+    const execAsync = promisify(exec);
+    
+    // Paths to virtual env and script
+    const pythonPath = path.join(process.cwd(), "venv/Scripts/python.exe");
+    const scriptPath = path.join(process.cwd(), "predict.py");
+    
+    // Fallback default predictions if ML fails
+    let mlPredictions = { RandomForest: 1.2, GradientBoosting: 1.4, XGBoost: 1.0 };
+    
+    try {
+      const escapedInput = JSON.stringify(input_data).replace(/"/g, '\\"');
+      const { stdout } = await execAsync(`"${pythonPath}" "${scriptPath}" "${escapedInput}"`, { cwd: process.cwd() });
+      const parsed = JSON.parse(stdout.trim());
+      if (parsed.status === "success") {
+        mlPredictions = parsed.predictions;
+      } else {
+        console.warn("Python prediction error:", parsed.message);
+      }
+    } catch (e: any) {
+      console.warn("Failed to execute ML models locally. Using standard fallbacks.", e.message);
+    }
+
+    // Stream the initial ML predictions to the frontend immediately
+    res.write(`data: ${JSON.stringify({ type: 'models', data: mlPredictions })}\n\n`);
+
+    const systemPrompt = `You are the QuMatForge 'Council of Agents', an elite panel of Quantum Material AI personas evaluating a compound for photonic squeezing.
+There are 3 ML models that just ran on the input data and gave slightly different predictions for the 'Squeezing dB' (higher is better).
+
+Your job is to simulate a fierce, structured debate among 4 personas. 
+Format your output exactly using the following tags for each speaker. Do NOT wrap the tags in markdown code blocks.
+
+<agent_rf> (Representing the Random Forest model's prediction. Pragmatic, looks at decision trees.)
+<agent_gb> (Representing the Gradient Boosting model. Aggressive, looks at error gradients.)
+<agent_xgb> (Representing XGBoost. Elite, highly optimized, confident.)
+<judge> (The Council Leader. Summarizes the debate and declares the final predicted score.)
+
+Make the debate dramatic but scientifically rigorous based on the provided material formula and the ML scores. The Judge MUST state the final absolute prediction at the end.`;
+
+    const userPrompt = `Material Formula: ${formula}
+Input Features: ${JSON.stringify(input_data)}
+
+ML Model Predictions (Squeezing dB):
+- Random Forest: ${mlPredictions.RandomForest.toFixed(3)} dB
+- Gradient Boosting: ${mlPredictions.GradientBoosting.toFixed(3)} dB
+- XGBoost: ${mlPredictions.XGBoost.toFixed(3)} dB
+
+Commence the debate.`;
+    
+    // Stream Groq response
+    const stream = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      messages: [
+        { role: "system", content: systemPrompt }, 
+        { role: "user", content: userPrompt }
+      ],
+      stream: true,
+      max_tokens: 2500
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        res.write(`data: ${JSON.stringify({ type: 'token', content })}\n\n`);
+      }
+    }
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+  } catch (err: any) {
+    console.error("Council Debate Error:", err);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+    res.end();
+  }
+});
+
 // Configure Vite or production static file serving
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

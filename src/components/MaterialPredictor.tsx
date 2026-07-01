@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Material } from "../types";
-import { Sparkles, BrainCircuit, Loader2, Play, CheckCircle } from "lucide-react";
+import { Sparkles, BrainCircuit, Loader2, Play, CheckCircle, Users } from "lucide-react";
+import { CouncilDebate } from "./CouncilDebate";
 
 interface MaterialPredictorProps {
   onAddCustomMaterial: (material: Material) => void;
@@ -18,6 +19,10 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [predictionResult, setPredictionResult] = useState<Material | null>(null);
+  
+  // Council Debate State
+  const [showCouncil, setShowCouncil] = useState(false);
+  const [councilInput, setCouncilInput] = useState<any>(null);
 
   const loadingPhrases = [
     "Initializing Density Functional Theory (DFT) self-consistent crystal relaxation...",
@@ -86,6 +91,29 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCouncilDebate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formula.trim()) {
+      setError("Please specify a valid chemical formula.");
+      return;
+    }
+    
+    // Create some pseudo-random but formula-dependent features for the ML models
+    // since we don't have a real Materials Project API key hooked up
+    const seed = formula.length + formula.charCodeAt(0);
+    const mockInputData = {
+      band_gap: 1.0 + (seed % 4),
+      hull_eV: 0,
+      formation_eV: -1.5 - (seed % 2),
+      density: 4.0 + (seed % 3),
+      piezoelectric_modulus: (seed % 5) * 1.5,
+      refractive_index: 2.0 + (seed % 2)
+    };
+    
+    setCouncilInput(mockInputData);
+    setShowCouncil(true);
   };
 
   const handleQuickPreset = (presetFormula: string, presetUseCase: string, presetDopants: string) => {
@@ -222,33 +250,75 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
             </p>
           </div>
 
-          {/* Run button */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={`w-full py-3 rounded-xl font-bold text-sm tracking-wide shadow-lg flex items-center justify-center space-x-2 transition-all cursor-pointer ${
-              isLoading
-                ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-                : "bg-cyan-500 text-slate-950 hover:bg-cyan-400 active:scale-[0.98] glow-box-cyan"
-            }`}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Simulating Compound...</span>
-              </>
-            ) : (
-              <>
-                <Play className="h-4 w-4 fill-current" />
-                <span>Simulate Quantum Compound</span>
-              </>
-            )}
-          </button>
+          {/* Run buttons */}
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              disabled={isLoading || showCouncil}
+              className={`w-full py-3 rounded-xl font-bold text-sm tracking-wide shadow-lg flex items-center justify-center space-x-2 transition-all cursor-pointer ${
+                isLoading || showCouncil
+                  ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                  : "bg-cyan-500 text-slate-950 hover:bg-cyan-400 active:scale-[0.98] glow-box-cyan"
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Simulating...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 fill-current" />
+                  <span>Standard Sim</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCouncilDebate}
+              disabled={isLoading || showCouncil}
+              className={`w-full py-3 rounded-xl font-bold text-sm tracking-wide shadow-lg flex items-center justify-center space-x-2 transition-all cursor-pointer ${
+                isLoading || showCouncil
+                  ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                  : "bg-indigo-500 text-white hover:bg-indigo-400 active:scale-[0.98] shadow-indigo-500/20"
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>AI Council Debate</span>
+            </button>
+          </div>
         </form>
 
         {/* Prediction Display Result panel */}
         <div className="lg:col-span-7 bg-[#0D0F16]/20 border border-slate-800 rounded-2xl p-6 min-h-[460px] flex flex-col justify-between backdrop-blur">
-          {isLoading ? (
+          {showCouncil ? (
+            <div className="w-full h-[600px]">
+              <CouncilDebate 
+                formula={formula} 
+                inputData={councilInput} 
+                onComplete={() => console.log("Debate complete")} 
+              />
+              <button 
+                onClick={() => setShowCouncil(false)}
+                className="mt-4 text-xs text-slate-400 hover:text-white"
+              >
+                Close Council
+              </button>
+            </div>
+          ) : !predictionResult && !isLoading ? (
+            <div className="flex-grow flex flex-col items-center justify-center space-y-4 text-center max-w-sm mx-auto py-12 text-slate-400">
+              <span className="p-3.5 rounded-full bg-[#0D0F16]/60 border border-slate-800">
+                <Sparkles className="h-6 w-6 text-slate-600" />
+              </span>
+              <div>
+                <h4 className="font-semibold text-slate-200 text-sm">Prediction Terminal Ready</h4>
+                <p className="text-xs text-slate-500 mt-1 leading-normal">
+                  Configure your compound's elemental formula and defects on the left panel, choose your ML engine resolution, and boot up the simulation solver.
+                </p>
+              </div>
+            </div>
+          ) : isLoading ? (
             <div className="flex-grow flex flex-col items-center justify-center space-y-6 text-center max-w-md mx-auto py-12">
               <div className="relative">
                 <Loader2 className="h-10 w-10 text-cyan-400 animate-spin" />

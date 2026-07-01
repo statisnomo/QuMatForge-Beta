@@ -22,19 +22,34 @@ You will also need a **Groq API Key**. You can obtain a free API key from the [G
 
 1. **Clone the repository** (if you haven't already).
 
-2. **Install dependencies**
+2. **Install Node.js dependencies**
    Navigate to the root of the project (where this `README.md` and `package.json` are located) and run:
    ```bash
    npm install
    ```
 
-3. **Set up environment variables**
+3. **Set up the Python ML Environment (Required for Council of Agents)**
+   The backend spawns a Python subprocess to run the actual Scikit-Learn/XGBoost models. You MUST create a Python virtual environment and install the required dependencies:
+   ```bash
+   # Create a virtual environment
+   python -m venv venv
+   
+   # Activate it (Windows)
+   .\venv\Scripts\activate
+   # Or on Mac/Linux: source venv/bin/activate
+   
+   # Install the required packages
+   pip install pandas scikit-learn xgboost joblib
+   ```
+   *Note: Ensure your virtual environment is named exactly `venv` so the backend `server.ts` can locate the python executable properly.*
+
+4. **Set up environment variables**
    Create a `.env` file in the root directory (or copy `.env.example` if it exists) and add your Groq API key:
    ```env
    GROQ_API_KEY=your_groq_api_key_here
    ```
 
-4. **Ensure Data Files are Present**
+5. **Ensure Data Files are Present**
    The application requires the photonic materials dataset to be in the root directory:
    - `photonic_final_candidates.csv`
 
