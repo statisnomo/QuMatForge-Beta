@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Material } from "./types";
+import AICoPilot from "./components/AICoPilot";
 import MaterialExplorer from "./components/MaterialExplorer";
 import MaterialPredictor from "./components/MaterialPredictor";
 import MaterialDesigner from "./components/MaterialDesigner";
-import { Compass, BrainCircuit, Sparkles, Cpu, RefreshCw, Layers, Zap, Atom } from "lucide-react";
+import { Compass, BrainCircuit, Sparkles, Cpu, RefreshCw, Layers, Zap, Atom, MessageSquareText } from "lucide-react";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"explorer" | "predict" | "design">("explorer");
+  const [activeTab, setActiveTab] = useState<"copilot" | "explorer" | "predict" | "design">("copilot");
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -131,6 +132,18 @@ export default function App() {
         <nav className="flex-1 px-4 py-6 space-y-2 flex flex-row md:flex-col justify-around md:justify-start overflow-x-auto md:overflow-x-visible">
 
           <button
+            onClick={() => setActiveTab("copilot")}
+            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+              activeTab === "copilot"
+                ? "bg-cyan-500/10 text-white border border-cyan-500/30 shadow-md shadow-cyan-500/5"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/20"
+            }`}
+          >
+            <MessageSquareText className={`h-4 w-4 ${activeTab === "copilot" ? "text-cyan-400" : "text-slate-400"}`} />
+            <span>AI Scientist Co-Pilot</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("explorer")}
             className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
               activeTab === "explorer"
@@ -199,11 +212,11 @@ export default function App() {
                 <span>Quantum Simulator Workspace</span>
                 <span>/</span>
                 <span className="text-cyan-400 font-bold">
-                  {activeTab === "explorer" ? "Discovery Dashboard" : activeTab === "predict" ? "ML Prediction Queue" : "Crystalline Design proposals"}
+                  {activeTab === "copilot" ? "AI Scientist Co-Pilot" : activeTab === "explorer" ? "Discovery Dashboard" : activeTab === "predict" ? "ML Prediction Queue" : "Crystalline Design proposals"}
                 </span>
               </div>
               <h2 className="text-xs sm:hidden font-bold text-white uppercase tracking-wider">
-                {activeTab === "explorer" ? "Discovery" : activeTab === "predict" ? "ML Prediction" : "AI Design"}
+                {activeTab === "copilot" ? "Co-Pilot" : activeTab === "explorer" ? "Discovery" : activeTab === "predict" ? "ML Prediction" : "AI Design"}
               </h2>
             </div>
 
@@ -243,6 +256,12 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-6 max-w-7xl mx-auto">
+                {activeTab === "copilot" && (
+                  <AICoPilot
+                    mode={mode}
+                    onAddCustomMaterial={handleAddCustomMaterial}
+                  />
+                )}
                 {activeTab === "explorer" && (
                   <MaterialExplorer
                     materials={materials}

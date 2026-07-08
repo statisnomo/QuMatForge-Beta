@@ -500,7 +500,10 @@ app.post("/api/council-debate", async (req, res) => {
     const execAsync = promisify(exec);
     
     // Paths to virtual env and script
-    const pythonPath = path.join(process.cwd(), "venv/Scripts/python.exe");
+    const isWindows = process.platform === "win32";
+    const pythonPath = isWindows 
+      ? path.join(process.cwd(), "venv/Scripts/python.exe")
+      : path.join(process.cwd(), "venv/bin/python");
     const scriptPath = path.join(process.cwd(), "predict.py");
     
     // Fallback default predictions if ML fails
@@ -568,6 +571,130 @@ Commence the debate.`;
     console.error("Council Debate Error:", err);
     res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
     res.end();
+  }
+});
+
+// ============================================================
+// AI SCIENTIST CO-PILOT - STREAMING CHAT ENDPOINT
+// ============================================================
+app.post("/api/copilot-chat", async (req, res) => {
+  try {
+    const { message, mode, history } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required." });
+    }
+
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    // Build context about the database so the AI can reference real materials
+    let dbContext = "";
+    if (mode === "photonic") {
+      const topMaterials = photonicDB
+        .sort((a, b) => b.final_composite - a.final_composite)
+        .slice(0, 15)
+        .map(m => `${m.formula} (sq=${m.sq_dB_pred.toFixed(2)}dB, n=${m.refractive_index.toFixed(2)}, piezo=${m.piezoelectric_modulus.toFixed(2)}, gap=${m.band_gap.toFixed(2)}eV, hull=${m.hull_eV.toFixed(3)}eV, ${m.crystal_system} ${m.spacegroup})`)
+        .join("\n");
+      dbContext = `\n\nYou have access to our photonic materials database. Here are the top 15 candidates by composite score:\n${topMaterials}`;
+    } else {
+      dbContext = `\n\nYou have access to our spin qubit materials database containing: Diamond NV- centers, Silicon Carbide (4H-SiC) VSi, hBN VB-, Silicon:P donors, CaWO4:Er3+ rare-earth hosts, Y2SiO5:Er3+ telecom hosts, NbN superconducting films, Bi2Se3 topological insulators, and others.`;
+    }
+
+    // Check if the user's message refers to a specific formula in the photonic DB
+    let materialLookup = "";
+    if (mode === "photonic") {
+      const formulaMatch = photonicDB.find(
+        (e) => message.toLowerCase().includes(e.formula.toLowerCase())
+      );
+      if (formulaMatch) {
+        materialLookup = `\n\nEXACT DB MATCH for "${formulaMatch.formula}":\n- Material ID: ${formulaMatch.material_id}\n- Band gap: ${formulaMatch.band_gap.toFixed(3)} eV\n- Hull energy: ${formulaMatch.hull_eV.toFixed(4)} eV\n- Formation energy: ${formulaMatch.formation_eV.toFixed(4)} eV/atom\n- Density: ${formulaMatch.density.toFixed(2)} g/cm³\n- Piezoelectric modulus: ${formulaMatch.piezoelectric_modulus.toFixed(3)} C/m²\n- Refractive index: ${formulaMatch.refractive_index.toFixed(3)}\n- Crystal system: ${formulaMatch.crystal_system}, Space group: ${formulaMatch.spacegroup}\n- Photonic score: ${formulaMatch.photonic_score}/11\n- Predicted squeezing: ${formulaMatch.sq_dB_pred.toFixed(3)} dB\n- Squeezing parameter r: ${formulaMatch.r_estimated.toFixed(4)}\n- Total transmissivity T: ${formulaMatch.T_total.toFixed(4)}\n- Final composite: ${formulaMatch.final_composite.toFixed(4)}\nUse these EXACT values in your analysis.`;
+      }
+    }
+
+    const systemPrompt = `You are the **QuMat AI Lead Scientist**, the co-pilot for the QuMatForge quantum materials discovery platform. You are an expert in condensed matter physics, quantum computing materials, crystallography, DFT simulations, and materials science.
+
+Your capabilities:
+- Analyze quantum materials for spin qubit, photonic, superconducting, and topological qubit applications
+- Explain crystal structures, defect physics, band structures, coherence mechanisms
+- Simulate and predict material properties using our ML backend models
+- Design novel quantum materials based on user specifications
+- Compare materials side-by-side with quantitative metrics
+
+Current mode: ${mode === "photonic" ? "Photonic / CV Quantum" : "Spin Qubit / Color Center"}
+${dbContext}
+${materialLookup}
+
+IMPORTANT RULES:
+1. Be scientifically rigorous but conversational. Use technical terminology naturally.
+2. When discussing specific materials, cite exact values from our database when available.
+3. When the user asks you to simulate or predict a material, provide your analysis AND include a structured JSON block (fenced with \`\`\`json ... \`\`\`) containing the material data in this exact schema:
+{
+  "name": "Material Name",
+  "formula": "ChemicalFormula",
+  "category": "Category string",
+  "crystalSystem": "Crystal System",
+  "spaceGroup": "Space group notation",
+  "bandGapEv": number,
+  "formationEnergyEvPerAtom": number,
+  "debyeTemperatureK": number,
+  "suitabilityScore": number (0-100),
+  "coherenceT2Estimated": "string description",
+  "nuclearSpinBackgroundScore": number (0-100),
+  "pros": ["advantage 1", "advantage 2", "advantage 3"],
+  "cons": ["challenge 1", "challenge 2"],
+  "synthesisMethodRecommended": "Synthesis method description",
+  "scientificReasoning": "Detailed scientific justification"
+}
+4. Only include the JSON block when the user explicitly asks to simulate, predict, or add a material. For general Q&A, just respond with text.
+5. Keep responses focused and avoid unnecessary repetition.
+6. Format important values in **bold**. Use line breaks for readability.`;
+
+    // Build message array from history
+    const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
+      { role: "system", content: systemPrompt },
+    ];
+
+    // Add conversation history (last N messages)
+    if (history && Array.isArray(history)) {
+      for (const msg of history.slice(-10)) {
+        if (msg.role === "user" || msg.role === "assistant") {
+          chatMessages.push({ role: msg.role, content: msg.content });
+        }
+      }
+    }
+
+    // Add current message
+    chatMessages.push({ role: "user", content: message });
+
+    // Stream response from Groq
+    const stream = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      messages: chatMessages,
+      stream: true,
+      max_tokens: 3000,
+      temperature: 0.7,
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        res.write(`data: ${JSON.stringify({ type: "token", content })}\n\n`);
+      }
+    }
+
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+  } catch (err: any) {
+    console.error("Co-Pilot Chat Error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: "error", message: err.message })}\n\n`);
+      res.end();
+    }
   }
 });
 

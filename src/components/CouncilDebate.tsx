@@ -78,6 +78,9 @@ export function CouncilDebate({ formula, inputData, onComplete }: CouncilDebateP
                   if (newMsgs.length > 0) {
                     setMessages(newMsgs);
                   }
+                } else if (data.type === 'error') {
+                  console.error("Backend returned error:", data.message);
+                  setIsDebating(false);
                 }
               } catch (e) {
                 console.error("Parse error stream chunk", e);
@@ -87,6 +90,7 @@ export function CouncilDebate({ formula, inputData, onComplete }: CouncilDebateP
         }
       } catch (err) {
         console.error("Debate error:", err);
+      } finally {
         setIsDebating(false);
       }
     };
