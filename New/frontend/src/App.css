@@ -286,3 +286,89 @@
   .app-shell { border-left: none; border-right: none; }
   .readout-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── Live formula predictor panel ─────────────────────────────────────── */
+
+.predictor-panel {
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.predictor-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-teal);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.predictor-row {
+  display: flex;
+  gap: 8px;
+}
+
+.predictor-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.predictor-input:focus {
+  border-color: var(--accent-teal);
+}
+
+.predictor-button {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--accent-teal);
+  color: var(--accent-teal);
+  border-radius: 6px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.predictor-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.predictor-error {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.predictor-result {
+  margin-top: 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+}
+
+.predictor-formula {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.predictor-score {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-amber);
+}
+
+.predictor-score-max {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import MessageBubble from './components/MessageBubble.jsx'
 import ChatInput from './components/ChatInput.jsx'
 import './App.css'
+import FormulaPredictor from './components/FormulaPredictor.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const API_KEY = import.meta.env.VITE_API_KEY || ''
@@ -101,6 +102,7 @@ export default function App() {
       )}
 
       <ChatInput onSend={sendQuery} disabled={loading} />
+      <FormulaPredictor apiBase={API_BASE} apiKey={API_KEY} />
     </div>
   )
 }

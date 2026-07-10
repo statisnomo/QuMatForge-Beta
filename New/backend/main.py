@@ -20,6 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import APP_API_KEY, ALLOWED_ORIGINS, RATE_LIMIT_PER_MINUTE
 from models import QueryRequest, QueryResponse, MaterialResult
 from materials_engine import MaterialsEngine
+from models import QueryRequest, QueryResponse, MaterialResult, PredictRequest, PredictResponse
+from live_predictor import LiveFormulaPredictor
 
 app = FastAPI(title="Quantum Materials Query API")
 
@@ -32,6 +34,7 @@ app.add_middleware(
 )
 
 engine = MaterialsEngine()
+live_predictor = LiveFormulaPredictor()
 
 # ── Rate limiting: per-IP sliding window, in-memory ───────────────────────────
 _request_log: dict[str, deque] = defaultdict(deque)
@@ -79,8 +82,9 @@ def query_materials(
     try:
         answer, results = engine.ask(question)
     except Exception as e:
-        # Don't leak internal stack traces to the client
-        raise HTTPException(status_code=500, detail=f"Query failed: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
     result_models = [
         MaterialResult(
@@ -98,3 +102,20 @@ def query_materials(
     ]
 
     return QueryResponse(answer=answer, results=result_models, result_count=len(result_models))
+
+@app.post("/api/predict", response_model=PredictResponse)
+def predict_formula(
+    payload: PredictRequest,
+    request: Request,
+    _rl=Depends(rate_limit),
+    _auth=Depends(verify_api_key),
+):
+    formula = payload.formula.strip()
+    if not formula:
+        raise HTTPException(status_code=400, detail="Formula cannot be empty")
+
+    result = live_predictor.predict(formula)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return PredictResponse(**result)

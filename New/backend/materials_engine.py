@@ -8,7 +8,7 @@ import json
 import pandas as pd
 import numpy as np
 from groq import Groq
-
+from model_loader import ModelBundle
 from config import GROQ_API_KEY, GROQ_MODEL, DATA_PATH
 
 SYSTEM_PROMPT = """You are an expert in photonic quantum computing materials.
@@ -53,6 +53,9 @@ Be specific and quantitative. Keep the response to 4-6 sentences."""
 class MaterialsEngine:
     def __init__(self, data_path: str = DATA_PATH):
         self.df = pd.read_csv(data_path)
+        if "sq_dB_pred" not in self.df.columns:
+            print("WARNING: sq_dB_pred missing from dataset — falling back to photonic_score for ranking.")
+            self.df["sq_dB_pred"] = self.df["photonic_score"]
         self.client = Groq(api_key=GROQ_API_KEY)
 
     def _extract_params(self, question: str) -> dict:
