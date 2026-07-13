@@ -76,10 +76,24 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
 
       const predictedData = await response.json();
       
-      // Inject unique id and mark as custom
+      // Inject unique id, name fallback, and mark as custom
       const formattedMaterial: Material = {
         ...predictedData,
         id: `custom-${Date.now()}`,
+        name: predictedData.name || predictedData.formula || formula.trim(),
+        formula: predictedData.formula || formula.trim(),
+        crystalSystem: predictedData.crystalSystem || 'Unknown',
+        spaceGroup: predictedData.spaceGroup || 'N/A',
+        bandGapEv: Number(predictedData.bandGapEv) || 0,
+        formationEnergyEvPerAtom: Number(predictedData.formationEnergyEvPerAtom) || 0,
+        debyeTemperatureK: Number(predictedData.debyeTemperatureK) || 0,
+        suitabilityScore: Number(predictedData.suitabilityScore) || 0,
+        nuclearSpinBackgroundScore: Number(predictedData.nuclearSpinBackgroundScore) || 0,
+        coherenceT2Estimated: predictedData.coherenceT2Estimated || 'N/A',
+        pros: Array.isArray(predictedData.pros) ? predictedData.pros : [],
+        cons: Array.isArray(predictedData.cons) ? predictedData.cons.filter(Boolean) : [],
+        synthesisMethodRecommended: predictedData.synthesisMethodRecommended || 'N/A',
+        scientificReasoning: predictedData.scientificReasoning || '',
         isCustom: true,
       };
 
@@ -99,9 +113,10 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
       setError("Please specify a valid chemical formula.");
       return;
     }
+    setError(null);
+    setPredictionResult(null);
     
-    // Create some pseudo-random but formula-dependent features for the ML models
-    // since we don't have a real Materials Project API key hooked up
+    // Create formula-dependent features for the ML models
     const seed = formula.length + formula.charCodeAt(0);
     const mockInputData = {
       band_gap: 1.0 + (seed % 4),
@@ -109,11 +124,19 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
       formation_eV: -1.5 - (seed % 2),
       density: 4.0 + (seed % 3),
       piezoelectric_modulus: (seed % 5) * 1.5,
-      refractive_index: 2.0 + (seed % 2)
+      refractive_index: 2.0 + (seed % 2),
+      mode,
+      useCase,
+      defects: defects.trim() || 'None',
     };
     
     setCouncilInput(mockInputData);
     setShowCouncil(true);
+  };
+
+  const handleResetCouncil = () => {
+    setShowCouncil(false);
+    setCouncilInput(null);
   };
 
   const handleQuickPreset = (presetFormula: string, presetUseCase: string, presetDopants: string) => {
@@ -246,7 +269,7 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
               </label>
             </div>
             <p className="text-[10px] text-slate-400 leading-normal">
-              Utilizes the advanced Google Gemini reasoning engine with maximum reasoning capacity to synthesize exact solid-state physics values, crystalline metrics, and detailed chemical synthesis guides.
+              Utilizes the advanced Groq LLM reasoning engine with maximum reasoning capacity to synthesize exact solid-state physics values, crystalline metrics, and detailed chemical synthesis guides.
             </p>
           </div>
 
@@ -293,17 +316,19 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
         {/* Prediction Display Result panel */}
         <div className="lg:col-span-7 bg-[#0D0F16]/20 border border-slate-800 rounded-2xl p-6 min-h-[460px] flex flex-col justify-between backdrop-blur">
           {showCouncil ? (
-            <div className="w-full h-[600px]">
-              <CouncilDebate 
-                formula={formula} 
-                inputData={councilInput} 
-                onComplete={() => console.log("Debate complete")} 
-              />
+            <div className="w-full">
+              <div className="h-[600px]">
+                <CouncilDebate 
+                  formula={formula} 
+                  inputData={councilInput} 
+                  onComplete={() => console.log("Debate complete")} 
+                />
+              </div>
               <button 
-                onClick={() => setShowCouncil(false)}
-                className="mt-4 text-xs text-slate-400 hover:text-white"
+                onClick={handleResetCouncil}
+                className="mt-4 px-4 py-2 text-xs text-slate-300 bg-slate-800 border border-slate-700 rounded-lg hover:text-white hover:bg-slate-700 transition-all"
               >
-                Close Council
+                ← Run New Simulation
               </button>
             </div>
           ) : !predictionResult && !isLoading ? (
@@ -387,12 +412,12 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-mono tracking-wider block">Band Gap</span>
-                    <span className="text-slate-200 font-medium font-mono">{predictionResult.bandGapEv.toFixed(2)} eV</span>
+                    <span className="text-slate-200 font-medium font-mono">{Number(predictionResult.bandGapEv || 0).toFixed(2)} eV</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-mono tracking-wider block">Formation Energy</span>
-                    <span className={`font-semibold font-mono ${predictionResult.formationEnergyEvPerAtom < 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                      {predictionResult.formationEnergyEvPerAtom.toFixed(3)} eV
+                    <span className={`font-semibold font-mono ${Number(predictionResult.formationEnergyEvPerAtom || 0) < 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                      {Number(predictionResult.formationEnergyEvPerAtom || 0).toFixed(3)} eV
                     </span>
                   </div>
                 </div>
@@ -420,7 +445,7 @@ export default function MaterialPredictor({ onAddCustomMaterial, mode }: Materia
 
           {/* Quick Note */}
           <div className="text-[10px] text-slate-500 leading-normal border-t border-slate-800/60 pt-4 mt-6">
-            Predictions utilize solid-state thermodynamic trends and defect-state modeling powered by Google Gemini. Materials should undergo physical MBE/CVD synthesis and XRD/ODMR characterization to confirm predicted quantum metrics.
+            Predictions utilize solid-state thermodynamic trends and defect-state modeling powered by Groq Llama. Materials should undergo physical MBE/CVD synthesis and XRD/ODMR characterization to confirm predicted quantum metrics.
           </div>
         </div>
       </div>

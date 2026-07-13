@@ -6,3 +6,21 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# AI tools
+.claude/
+
+# OS
+Thumbs.db

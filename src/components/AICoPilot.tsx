@@ -196,51 +196,222 @@ export default function AICoPilot({ mode, onAddCustomMaterial }: AICoPilotProps)
     }
   };
 
+  // Render inline markdown (bold, italic) for a single line
+  const renderInlineMd = (line: string, lineIdx: number) => {
+    let parts: (string | React.ReactNode)[] = [line];
+
+    // Bold **text**
+    parts = parts.flatMap((part, pi) => {
+      if (typeof part !== 'string') return [part];
+      const segments: (string | React.ReactNode)[] = [];
+      const boldRegex = /\*\*(.*?)\*\*/g;
+      let lastIndex = 0;
+      let match;
+      while ((match = boldRegex.exec(part)) !== null) {
+        if (match.index > lastIndex) segments.push(part.slice(lastIndex, match.index));
+        segments.push(<strong key={`b-${lineIdx}-${pi}-${match.index}`} className="text-slate-100 font-semibold">{match[1]}</strong>);
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < part.length) segments.push(part.slice(lastIndex));
+      return segments.length > 0 ? segments : [part];
+    });
+
+    // Italic _text_
+    parts = parts.flatMap((part, pi) => {
+      if (typeof part !== 'string') return [part];
+      const segments: (string | React.ReactNode)[] = [];
+      const italicRegex = /_(.*?)_/g;
+      let lastIndex = 0;
+      let match;
+      while ((match = italicRegex.exec(part)) !== null) {
+        if (match.index > lastIndex) segments.push(part.slice(lastIndex, match.index));
+        segments.push(<em key={`i-${lineIdx}-${pi}-${match.index}`} className="text-cyan-300/90 not-italic font-mono text-xs">{match[1]}</em>);
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < part.length) segments.push(part.slice(lastIndex));
+      return segments.length > 0 ? segments : [part];
+    });
+
+    return parts;
+  };
+
+  // Render a parsed Material JSON as a styled properties card
+  const renderMaterialCard = (mat: Record<string, any>, key: string) => {
+    const score = mat.suitabilityScore ?? 0;
+    const scoreColor = score >= 80 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-rose-400';
+    const scoreBg = score >= 80 ? 'bg-emerald-500/10 border-emerald-500/20' : score >= 50 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-rose-500/10 border-rose-500/20';
+
+    return (
+      <div key={key} className="my-3 bg-[#0D0F16] border border-slate-700/60 rounded-xl overflow-hidden">
+        {/* Card header */}
+        <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700/40 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-100 font-mono">{mat.formula || 'Unknown'}</p>
+              <p className="text-[10px] text-slate-400">{mat.name || mat.formula}</p>
+            </div>
+          </div>
+          <div className={`px-2.5 py-1 rounded-full border text-xs font-bold font-mono ${scoreBg} ${scoreColor}`}>
+            {score}%
+          </div>
+        </div>
+
+        {/* Properties grid */}
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {mat.crystalSystem && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Crystal System</p>
+              <p className="text-xs text-slate-200 font-mono">{mat.crystalSystem}</p>
+            </div>
+          )}
+          {mat.spaceGroup && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Space Group</p>
+              <p className="text-xs text-slate-200 font-mono">{mat.spaceGroup}</p>
+            </div>
+          )}
+          {mat.bandGapEv !== undefined && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Band Gap</p>
+              <p className="text-xs text-cyan-400 font-mono font-bold">{mat.bandGapEv} eV</p>
+            </div>
+          )}
+          {mat.formationEnergyEvPerAtom !== undefined && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Formation Energy</p>
+              <p className="text-xs text-slate-200 font-mono">{mat.formationEnergyEvPerAtom} eV/atom</p>
+            </div>
+          )}
+          {mat.debyeTemperatureK !== undefined && mat.debyeTemperatureK > 0 && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Debye Temp</p>
+              <p className="text-xs text-slate-200 font-mono">{mat.debyeTemperatureK} K</p>
+            </div>
+          )}
+          {mat.coherenceT2Estimated && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Coherence T₂</p>
+              <p className="text-xs text-slate-200 font-mono">{mat.coherenceT2Estimated}</p>
+            </div>
+          )}
+          {mat.category && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Category</p>
+              <p className="text-xs text-slate-200">{mat.category}</p>
+            </div>
+          )}
+          {mat.nuclearSpinBackgroundScore !== undefined && (
+            <div className="space-y-0.5">
+              <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Nuclear Spin Score</p>
+              <p className="text-xs text-slate-200 font-mono">{mat.nuclearSpinBackgroundScore}/100</p>
+            </div>
+          )}
+        </div>
+
+        {/* Pros / Cons */}
+        {(mat.pros?.length > 0 || mat.cons?.length > 0) && (
+          <div className="px-4 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {mat.pros?.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-emerald-400/80 uppercase font-mono tracking-wider font-bold">Advantages</p>
+                {mat.pros.map((p: string, i: number) => (
+                  <p key={i} className="text-[11px] text-slate-300 flex items-start gap-1.5">
+                    <span className="text-emerald-400 mt-0.5">✓</span> {p}
+                  </p>
+                ))}
+              </div>
+            )}
+            {mat.cons?.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-amber-400/80 uppercase font-mono tracking-wider font-bold">Challenges</p>
+                {mat.cons.map((c: string, i: number) => (
+                  <p key={i} className="text-[11px] text-slate-300 flex items-start gap-1.5">
+                    <span className="text-amber-400 mt-0.5">⚠</span> {c}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Synthesis & Reasoning */}
+        {(mat.synthesisMethodRecommended || mat.scientificReasoning) && (
+          <div className="px-4 pb-4 space-y-2 border-t border-slate-800/60 pt-3">
+            {mat.synthesisMethodRecommended && (
+              <div>
+                <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider mb-0.5">Synthesis Method</p>
+                <p className="text-[11px] text-slate-400 italic">{mat.synthesisMethodRecommended}</p>
+              </div>
+            )}
+            {mat.scientificReasoning && (
+              <div>
+                <p className="text-[9px] text-slate-500 uppercase font-mono tracking-wider mb-0.5">Scientific Reasoning</p>
+                <p className="text-[11px] text-slate-400 leading-relaxed">{mat.scientificReasoning}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderMessageContent = (content: string) => {
-    // Simple markdown-lite renderer for bold, italic, and line breaks
-    const lines = content.split('\n');
-    return lines.map((line, i) => {
-      // Process bold **text**
-      let parts: (string | React.ReactNode)[] = [line];
+    // Split content into segments: text and ```json blocks
+    const segments: { type: 'text' | 'json'; content: string }[] = [];
+    const jsonBlockRegex = /```json\s*([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match;
 
-      // Bold
-      parts = parts.flatMap((part, pi) => {
-        if (typeof part !== 'string') return [part];
-        const segments: (string | React.ReactNode)[] = [];
-        const boldRegex = /\*\*(.*?)\*\*/g;
-        let lastIndex = 0;
-        let match;
-        while ((match = boldRegex.exec(part)) !== null) {
-          if (match.index > lastIndex) segments.push(part.slice(lastIndex, match.index));
-          segments.push(<strong key={`b-${i}-${pi}-${match.index}`} className="text-slate-100 font-semibold">{match[1]}</strong>);
-          lastIndex = match.index + match[0].length;
+    while ((match = jsonBlockRegex.exec(content)) !== null) {
+      // Text before the JSON block
+      if (match.index > lastIndex) {
+        segments.push({ type: 'text', content: content.slice(lastIndex, match.index) });
+      }
+      segments.push({ type: 'json', content: match[1].trim() });
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Remaining text after last JSON block
+    if (lastIndex < content.length) {
+      segments.push({ type: 'text', content: content.slice(lastIndex) });
+    }
+
+    return segments.map((seg, segIdx) => {
+      if (seg.type === 'json') {
+        // Try to parse and render as material card
+        try {
+          const parsed = JSON.parse(seg.content);
+          if (parsed && (parsed.formula || parsed.name)) {
+            return renderMaterialCard(parsed, `mat-${segIdx}`);
+          }
+        } catch {
+          // If JSON is malformed (still streaming), show a subtle loading indicator
+          return (
+            <div key={`json-${segIdx}`} className="my-2 px-3 py-2 bg-slate-800/30 border border-slate-700/40 rounded-lg">
+              <p className="text-[10px] text-slate-500 font-mono flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60 animate-pulse" />
+                Generating material analysis...
+              </p>
+            </div>
+          );
         }
-        if (lastIndex < part.length) segments.push(part.slice(lastIndex));
-        return segments.length > 0 ? segments : [part];
-      });
+      }
 
-      // Italic _text_
-      parts = parts.flatMap((part, pi) => {
-        if (typeof part !== 'string') return [part];
-        const segments: (string | React.ReactNode)[] = [];
-        const italicRegex = /_(.*?)_/g;
-        let lastIndex = 0;
-        let match;
-        while ((match = italicRegex.exec(part)) !== null) {
-          if (match.index > lastIndex) segments.push(part.slice(lastIndex, match.index));
-          segments.push(<em key={`i-${i}-${pi}-${match.index}`} className="text-cyan-300/90 not-italic font-mono text-xs">{match[1]}</em>);
-          lastIndex = match.index + match[0].length;
-        }
-        if (lastIndex < part.length) segments.push(part.slice(lastIndex));
-        return segments.length > 0 ? segments : [part];
-      });
-
-      // Bullet points
-      const isBullet = line.trimStart().startsWith('•') || line.trimStart().startsWith('-');
-
+      // Render text segment with inline markdown
+      const lines = seg.content.split('\n');
       return (
-        <span key={i} className={`block ${isBullet ? 'pl-2' : ''} ${line === '' ? 'h-3' : ''}`}>
-          {parts}
+        <span key={`text-${segIdx}`}>
+          {lines.map((line, i) => {
+            const isBullet = line.trimStart().startsWith('•') || line.trimStart().startsWith('-');
+            return (
+              <span key={i} className={`block ${isBullet ? 'pl-2' : ''} ${line === '' ? 'h-3' : ''}`}>
+                {renderInlineMd(line, i)}
+              </span>
+            );
+          })}
         </span>
       );
     });
