@@ -12,6 +12,7 @@ export function CouncilDebate({ formula, inputData, onComplete }: CouncilDebateP
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [mlScores, setMlScores] = useState<any>(null);
   const [isDebating, setIsDebating] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const bottomRef = useRef<HTMLDivElement>(null);
   
@@ -63,11 +64,11 @@ export function CouncilDebate({ formula, inputData, onComplete }: CouncilDebateP
                 } else if (data.type === 'token') {
                   currentContent += data.content;
                   
-                  // Simple parsing logic for tags
-                  const rfMatch = currentContent.match(/<agent_rf>([\s\S]*?)(?:<\/?agent|<judge>|$)/);
-                  const gbMatch = currentContent.match(/<agent_gb>([\s\S]*?)(?:<\/?agent|<judge>|$)/);
-                  const xgbMatch = currentContent.match(/<agent_xgb>([\s\S]*?)(?:<\/?agent|<judge>|$)/);
-                  const judgeMatch = currentContent.match(/<judge>([\s\S]*?)(?:$)/);
+                  // Flexible parsing logic for agent tags - handle with/without closing tags
+                  const rfMatch = currentContent.match(/<agent_rf>\s*([\s\S]*?)(?:<\/agent_rf>|<agent_gb>|<agent_xgb>|<judge>|$)/i);
+                  const gbMatch = currentContent.match(/<agent_gb>\s*([\s\S]*?)(?:<\/agent_gb>|<agent_rf>|<agent_xgb>|<judge>|$)/i);
+                  const xgbMatch = currentContent.match(/<agent_xgb>\s*([\s\S]*?)(?:<\/agent_xgb>|<agent_rf>|<agent_gb>|<judge>|$)/i);
+                  const judgeMatch = currentContent.match(/<judge>\s*([\s\S]*?)(?:<\/judge>|$)/i);
                   
                   const newMsgs = [];
                   if (rfMatch && rfMatch[1].trim()) newMsgs.push({ role: 'Random Forest', content: rfMatch[1].trim() });
@@ -75,11 +76,21 @@ export function CouncilDebate({ formula, inputData, onComplete }: CouncilDebateP
                   if (xgbMatch && xgbMatch[1].trim()) newMsgs.push({ role: 'XGBoost', content: xgbMatch[1].trim() });
                   if (judgeMatch && judgeMatch[1].trim()) newMsgs.push({ role: 'Judge', content: judgeMatch[1].trim() });
                   
+                  // If no tags parsed yet but we have content, show it as system
+                  if (newMsgs.length === 0 && currentContent.trim().length > 20) {
+                    // Strip any leading tag markers that haven't completed yet
+                    const cleanContent = currentContent.replace(/<\/?agent_\w*>?/gi, '').replace(/<\/?judge>?/gi, '').trim();
+                    if (cleanContent) {
+                      newMsgs.push({ role: 'Random Forest', content: cleanContent });
+                    }
+                  }
+                  
                   if (newMsgs.length > 0) {
                     setMessages(newMsgs);
                   }
                 } else if (data.type === 'error') {
                   console.error("Backend returned error:", data.message);
+                  setErrorMsg(data.message);
                   setIsDebating(false);
                 }
               } catch (e) {
@@ -157,27 +168,40 @@ export function CouncilDebate({ formula, inputData, onComplete }: CouncilDebateP
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-sm">
-        <AnimatePresence>
-          {messages.map((msg, i) => (
-            <motion.div 
-              key={msg.role}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`p-4 rounded-lg border ${getRoleColor(msg.role)}`}
-            >
-              <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-2">
-                {getRoleIcon(msg.role)}
-                <span className="font-bold text-slate-200">{msg.role}</span>
-              </div>
-              <div className="text-slate-300 leading-relaxed whitespace-pre-wrap">
-                {msg.content}
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-        <div ref={bottomRef} />
-      </div>
+      {/* Error state */}
+      {errorMsg && (
+        <div className="flex-1 flex items-center justify-center p-6 text-center">
+          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 rounded-xl">
+            <h3 className="font-bold mb-2">API Error Occurred</h3>
+            <p className="text-sm">{errorMsg}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Messages */}
+      {!errorMsg && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          <AnimatePresence>
+            {messages.map((msg, idx) => (
+              <motion.div 
+                key={idx}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`p-4 rounded-lg border ${getRoleColor(msg.role)}`}
+              >
+                <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-2">
+                  {getRoleIcon(msg.role)}
+                  <span className="font-bold text-slate-200">{msg.role}</span>
+                </div>
+                <div className="text-slate-300 leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          <div ref={bottomRef} className="h-4" />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,13 @@
 import express from "express";
+import dns from "node:dns";
+dns.setDefaultResultOrder("ipv4first");
 import path from "path";
 import dotenv from "dotenv";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import Groq from "groq-sdk";
+import { exec, execSync } from "child_process";
+import { promisify } from "util";
 
 dotenv.config();
 
@@ -12,7 +16,7 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Initialize Groq Client (free tier, fast)
+// Initialize Groq Client
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
@@ -369,19 +373,28 @@ Use these exact values in your response. Compare against LiNbO3 baseline (2.860 
     } else {
       // ---- SPIN MODE: call Python ML backend ----
       try {
-        const pythonPath = "C:/Users/anand/.gemini/antigravity/scratch/quantum_materials/venv/Scripts/python.exe";
-        const scriptPath = "C:/Users/anand/.gemini/antigravity/scratch/quantum_materials/predict_json.py";
-        const execSync = require("child_process").execSync;
-        const output = execSync(`"${pythonPath}" "${scriptPath}" "${formula}"`, {
+        const isWin = process.platform === "win32";
+        const pythonPath = isWin
+          ? path.join(process.cwd(), "venv", "Scripts", "python.exe")
+          : path.join(process.cwd(), "venv", "bin", "python");
+        const scriptPath = path.join(process.cwd(), "predict.py");
+        // predict.py expects JSON input with feature columns
+        const inputJson = JSON.stringify({
+          band_gap: 3.0, hull_eV: 0.05, formation_eV: -2.0,
+          density: 3.5, piezoelectric_modulus: 0.5, refractive_index: 2.0
+        });
+        const escapedInput = inputJson.replace(/"/g, '\\"');
+        const output = execSync(`"${pythonPath}" "${scriptPath}" "${escapedInput}"`, {
           encoding: 'utf-8',
-          cwd: "C:/Users/anand/.gemini/antigravity/scratch/quantum_materials"
+          cwd: process.cwd()
         });
         const mlData = JSON.parse(output.trim());
-        if (!mlData.error) {
-          mlInjection = `\n\nCRITICAL INSTRUCTION: Our internal XGBoost ML model has calculated the T2 coherence time for this material to be exactly: ${mlData.T2_display} (or ${mlData.T2_us} microseconds). You MUST use this exact T2 value in the coherenceT2Estimated field. Incorporate this T2 into your scientific reasoning.`;
+        if (mlData.status === "success") {
+          const avgPred = ((mlData.predictions.RandomForest + mlData.predictions.GradientBoosting + mlData.predictions.XGBoost) / 3).toFixed(3);
+          mlInjection = `\n\nCRITICAL INSTRUCTION: Our internal ensemble ML models predict a suitability metric of ${avgPred} for this material class. Use this as a reference for your suitability scoring.`;
         }
       } catch (err) {
-        console.warn("ML Model execution failed:", err);
+        console.warn("ML Model execution failed (non-critical, continuing with LLM-only prediction):", (err as Error).message);
       }
     }
 
@@ -410,13 +423,13 @@ Defects/Dopants: ${defects || "None / Host material analysis"}${mlInjection}
 
 Generate a detailed, comprehensive prediction of this material's thermodynamic, structural, and qubit properties. Include realistic lattice parameters, estimated coherence times (considering isotopic enrichment options), the exact defect characteristics (if applicable), pros/cons, synthesis methods, and a thorough scientific explanation in the 'scientificReasoning' field.`;
 
-    // Call Groq instead of Gemini
+    // Call Groq LLM
     const response = await groq.chat.completions.create({
       model: GROQ_MODEL,
       max_tokens: 2000,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: systemInstruction + "\n\nYou MUST respond with a valid JSON object containing these fields: formula (string), crystalSystem (string), spaceGroup (string), bandGapEv (number), formationEnergyEvPerAtom (number), debyeTemperatureK (number), suitabilityScore (number 0-100), primaryQubitType (string), coherenceT2Estimated (string), nuclearSpinBackgroundScore (number 0-100), pros (array of strings), cons (array of strings), latticeParameters (object with a,b,c,alpha,beta,gamma numbers), synthesisMethodRecommended (string), scientificReasoning (string)" + (isPhotonic ? ", squeezingDb (number), refractiveIndex (number), piezoelectricModulus (number), transmissivity (number), photonicScore (number), rEstimated (number)" : "") },
+        { role: "system", content: systemInstruction + "\n\nYou MUST respond with a valid JSON object containing these fields: name (string, human-readable material name), formula (string), crystalSystem (string), spaceGroup (string), bandGapEv (number), formationEnergyEvPerAtom (number), debyeTemperatureK (number), suitabilityScore (number 0-100), primaryQubitType (string), coherenceT2Estimated (string), nuclearSpinBackgroundScore (number 0-100), pros (array of strings), cons (array of strings), latticeParameters (object with a,b,c,alpha,beta,gamma numbers), synthesisMethodRecommended (string), scientificReasoning (string)" + (isPhotonic ? ", squeezingDb (number), refractiveIndex (number), piezoelectricModulus (number), transmissivity (number), photonicScore (number), rEstimated (number)" : "") },
         { role: "user", content: userPrompt }
       ]
     });
@@ -495,8 +508,6 @@ app.post("/api/council-debate", async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
 
     // Run Python ML models concurrently via predict.py
-    const { exec } = require("child_process");
-    const { promisify } = require("util");
     const execAsync = promisify(exec);
     
     // Paths to virtual env and script
@@ -525,18 +536,37 @@ app.post("/api/council-debate", async (req, res) => {
     // Stream the initial ML predictions to the frontend immediately
     res.write(`data: ${JSON.stringify({ type: 'models', data: mlPredictions })}\n\n`);
 
-    const systemPrompt = `You are the QuMatForge 'Council of Agents', an elite panel of Quantum Material AI personas evaluating a compound for photonic squeezing.
+    const councilMode = input_data?.mode || 'photonic';
+    const councilUseCase = input_data?.useCase || 'Photonic / CV Quantum';
+    const councilDefects = input_data?.defects || 'None';
+
+    const systemPrompt = councilMode === 'photonic'
+      ? `You are the QuMatForge 'Council of Agents', an elite panel of Quantum Material AI personas evaluating a compound for photonic squeezing.
 There are 3 ML models that just ran on the input data and gave slightly different predictions for the 'Squeezing dB' (higher is better).
 
-Your job is to simulate a fierce, structured debate among 4 personas. 
+Your job is to simulate a fierce, structured debate among 4 personas.
 Format your output exactly using the following tags for each speaker. Do NOT wrap the tags in markdown code blocks.
 
 <agent_rf> (Representing the Random Forest model's prediction. Pragmatic, looks at decision trees.)
 <agent_gb> (Representing the Gradient Boosting model. Aggressive, looks at error gradients.)
 <agent_xgb> (Representing XGBoost. Elite, highly optimized, confident.)
-<judge> (The Council Leader. Summarizes the debate and declares the final predicted score.)
+<judge> (The Council Leader. Summarizes the debate, explains the reasoning, and declares the final predicted score.)
 
-Make the debate dramatic but scientifically rigorous based on the provided material formula and the ML scores. The Judge MUST state the final absolute prediction at the end.`;
+Make the debate dramatic but scientifically rigorous based on the provided material formula and the ML scores. The Judge MUST explicitly explain the scientific reasoning behind their final decision before stating the final absolute prediction at the end.`
+      : `You are the QuMatForge 'Council of Agents', an elite panel of Quantum Material AI personas evaluating a compound for quantum computing applications.
+Use case: ${councilUseCase}. Defects/Dopants: ${councilDefects}.
+There are 3 ML models that just ran and each estimated a suitability metric (higher is better).
+
+Your job is to simulate a fierce, structured debate among 4 personas.
+Format your output exactly using the following tags for each speaker. Do NOT wrap the tags in markdown code blocks.
+
+<agent_rf> (Representing the Random Forest model. Pragmatic, conservative, cites stability and reproducibility.)
+<agent_gb> (Representing the Gradient Boosting model. Aggressive, focuses on error correction and coherence limits.)
+<agent_xgb> (Representing XGBoost. Elite optimizer, confident, pushes for the highest suitability.)
+<judge> (The Council Leader. Weighs all arguments. Explains the reasoning thoroughly, then declares a final suitability score and recommendation.)
+
+Focus the debate on crystal stability, coherence times, defect physics, nuclear spin noise, and synthesis feasibility.
+The Judge MUST explicitly explain the scientific reasoning for their decision, and then declare a final suitability score (0-100) and a definitive yes/no recommendation at the end.`;
 
     const userPrompt = `Material Formula: ${formula}
 Input Features: ${JSON.stringify(input_data)}
@@ -552,7 +582,7 @@ Commence the debate.`;
     const stream = await groq.chat.completions.create({
       model: GROQ_MODEL,
       messages: [
-        { role: "system", content: systemPrompt }, 
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
       stream: true,
